@@ -5,6 +5,8 @@ const memfs = require('memfs')
 const joinPath = require('memory-fs/lib/join')
 
 const babelConfig = require('./.babelrc.js')
+const loadDependenciesInMemory = require('./loadDependenciesInMemory')
+
 
 // create memory fs with the index.js file
 const vol = new memfs.Volume.fromJSON({
@@ -16,46 +18,60 @@ const vol = new memfs.Volume.fromJSON({
 })
 const fs = ensureWebpackMemoryFs(memfs.createFsFromVolume(vol))
 
-const compiler = webpack({
-  mode: 'production',
-  entry: '/memfs/index.js',
-  context: '/memfs/',
-  output: {
-    filename: '[name].min.js',
-    path: '/memfs/dist',
-  },
-
-  module: {
-    rules: [
-      {
-        test: /\.js$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-          options: babelConfig,
-        },
-      },
-    ],
+loadDependenciesInMemory({
+  packages: ['babel-loader'],
+  rootPath: '/memfs/',
+  fs: {
+    input: realFs,
+    output: fs,
   },
 })
+.then(() => {
+  const compiler = webpack({
+    mode: 'production',
+    entry: '/memfs/index.js',
+    context: '/memfs/',
+    output: {
+      filename: '[name].min.js',
+      path: '/memfs/dist',
+    },
+  
+    module: {
+      rules: [
+        {
+          test: /\.js$/,
+          exclude: /node_modules/,
+          use: {
+            loader: 'babel-loader',
+            options: babelConfig,
+          },
+        },
+      ],
+    },
+  })
 
+  compiler.inputFileSystem = fs
+  compiler.outputFileSystem = fs
 
+  compiler.run(function webpackCompilerRunCallback(err, stats) {
+    if (err) {
+      console.error(err)
+      return
+    }
+    if (stats.hasErrors()) {
+      console.error(stats.toJson().errors)
+      return
+    }
+    if (stats.hasWarnings()) {
+      console.warn(stats.toJson().warnings)
+    }
+  
+    console.log(stats.toJson('minimal'))
+  })
 
-compiler.inputFileSystem = fs
-compiler.outputFileSystem = fs
-
-compiler.run(function webpackCompilerRunCallback(err, stats) {
-  if (err) {
-    throw err
-  }
-  if (stats.hasErrors()) {
-    throw stats.toJson().errors
-  }
-  if (stats.hasWarnings()) {
-    console.warn(stats.toJson().warnings)
-  }
-
-  console.log(stats.toJson('minimal'))
+})
+.catch(err => {
+  throw err
 })
 
 function ensureWebpackMemoryFs(fs) {

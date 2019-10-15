@@ -18,6 +18,7 @@ const vol = new memfs.Volume.fromJSON({
 })
 const fs = ensureWebpackMemoryFs(memfs.createFsFromVolume(vol))
 
+// what this function does is basically copies the files for dep tree into the memory
 loadDependenciesInMemory({
   packages: ['babel-loader'],
   rootPath: '/memfs/',
